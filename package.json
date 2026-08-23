@@ -1,0 +1,38 @@
+{
+  "name": "@dxpert/mcp",
+  "version": "0.1.0",
+  "description": "Stdio MCP server for dxpert.ai API keys: Ask dxpert, run UNS agents, run diagnostics, and convert day-one CSV exports.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/server.js",
+  "exports": {
+    ".": "./src/server.js"
+  },
+  "bin": {
+    "dxpert-mcp": "bin/dxpert-mcp.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node test/run.js"
+  },
+  "dependencies": {},
+  "keywords": [
+    "mcp",
+    "dxpert",
+    "industrial-ai",
+    "uns",
+    "claude-code",
+    "codex"
+  ],
+  "homepage": "https://dxpert.ai/api.html",
+  "author": "DXP Technologies inc. (https://dxpert.ai)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dxpert-ai/dxpert-mcp.git"
+  }
+}
