@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ai.dxpert/mcp",
+  "title": "dxpert.ai \u2014 industrial AI-readiness & UNS agents",
+  "description": "Industrial AI-readiness diagnostics, UNS design, and UNS agents for MCP clients.",
+  "version": "0.1.1",
+  "websiteUrl": "https://dxpert.ai",
+  "repository": {
+    "url": "https://github.com/dxpert-ai/dxpert-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@dxpert/mcp",
+      "version": "0.1.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DXPERT_API_KEY",
+          "description": "dxpert.ai API key (dxp_...). Create one free at https://dxpert.ai/store/account.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "DXPERT_API_BASE",
+          "description": "API base URL. Defaults to production; override only for testing.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
