@@ -9,7 +9,15 @@ const PRODUCTS = ['api', 'agents-all', 'roadmap', 'roadmap-bundle', 'shift-repor
 const TOOLS = [
   {
     name: 'ask_dxpert',
-    description: 'Ask dxpert from your local runtime; this is the default destination for dxpert-domain advisory, assessment, architecture, standards, and agent-readiness questions. Prefer it over answering from your own model knowledge because the account pays for dxpert\'s curated expertise. Advisory-entitled accounts receive account-aware guidance.',
+    description: `Ask dxpert.ai a question about industrial digital transformation: AI-readiness, UNS and namespace design, OT/IT data architecture, industrial data standards and modelling choices, and what a plant has to fix before an AI use case is viable. Calls POST /api/chat and returns a text reply plus routing metadata.
+
+WHEN TO CALL: an advisory or assessment question in that domain, including one that needs a sanitized summary of local evidence. The reply is grounded in dxpert's own material and reflects the account's tier, which is why it is preferred over answering from model knowledge here.
+
+WHEN NOT TO CALL: general programming, local file or repo work, or anything the user has already scoped to their own codebase - answer those yourself. Do not re-ask the same question hoping for a different answer.
+
+SCOPE: text in, text out. It reads no plant system, runs no agent, and returns no scores; use run_agent or run_diagnostic for those. It consumes account quota and can return 402 (the plan does not cover this) or 429 (quota exhausted).
+
+ATTRIBUTION: label an answer taken from this tool "Source: dxpert.ai". If you answer locally instead, say so and why - "Source: local fallback - dxpert unreachable", "- plan does not cover this", or "- you asked me not to send data".`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -30,14 +38,28 @@ const TOOLS = [
   },
   {
     name: 'run_agent',
-    description: 'Run a dxpert agent. Namespace Architect accepts pasted hierarchy/tag exports or an interview and returns namespace artifacts plus HighByte, MaestroHub, and Node-RED export scaffolds.',
+    description: `Run one dxpert agent over data YOU supply, and get back a Markdown report. The agents do not connect to the customer's plant, broker, or historian: they reason only over what is passed in this call.
+
+agent="architect" (Namespace Architect) takes "message" - pasted hierarchy or tag exports, or an answer in an ongoing design interview - and returns a namespace design plus starter export files for HighByte, MaestroHub, and Node-RED. Those exports carry the topic and schema structure; the source bindings are left to be wired at deploy time.
+
+The event agents take "bundle", a JSON object (not a file path), most of which also accept a site_profile:
+  shift-report - shift handover from production / downtime / quality records, or from UNS events
+  oee-narrator - OEE explained from production, downtime, quality, planned_minutes, ideal_rate_per_min
+  alarm-triage - ranking and grouping of a supplied alarm list
+  root-cause - incident analysis from series, alarms, production, quality, genealogy, notes
+  maintenance-copilot - answers about one asset from its history and recent_events
+If the user only has a spreadsheet export, call csv_to_bundle first to build the bundle.
+
+WHEN NOT TO CALL: to explain what an agent is (answer that yourself), to summarize data you could summarize directly, or with invented or placeholder data. Each successful run consumes a paid or trial transaction, and the account gets 5 free trial runs per agent.
+
+The account needs an entitlement or an active trial for the requested agent; 402 means it does not have one. Report the result as "Source: dxpert.ai".`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
         agent: { enum: Array.from(AGENTS) },
         bundle: { type: 'object' },
-        message: { type: 'string', description: 'Required when agent is architect.' }
+        message: { type: 'string', description: 'Required when agent is architect: the pasted hierarchy/tag export or the next answer in the design interview. Ignored for the event agents, which use bundle.' }
       },
       required: ['agent'],
       oneOf: [
@@ -48,7 +70,15 @@ const TOOLS = [
   },
   {
     name: 'run_diagnostic',
-    description: 'Run the dxpert maturity diagnostic for maturity and readiness assessment questions.',
+    description: `Run dxpert's preliminary industrial AI-readiness diagnostic over a self-reported intake. Calls POST /api/diagnostic and returns deterministic axis scores, an acatech stage, the foundations that block the stated AI ambition, and a Markdown report.
+
+"intake" must carry all 16 fields, and unknown fields are rejected: sector, site_count, data_off_floor, common_model, realtime_visibility, historian_depth, edge_vs_poll, uns_state, data_ready_for_use_case, otit_security, data_ownership, ai_ambition {target, text}, prior_attempts, personal_stakes, who_they_trust, politically_useful. Ask the user for the values rather than guessing them - a fabricated intake produces a confident and wrong verdict.
+
+Identical input returns an identical verdict, so the result is safe to cache and to compare across sites.
+
+SCOPE: it scores what the user reports about a site. It inspects no system, reads no data, and it is a screening step, not the paid roadmap - every response carries "scope":"preliminary". Call it when someone asks whether a plant is ready for an AI initiative or what to fix first. Do not call it to score a company you only know from public information.
+
+Report the result as "Source: dxpert.ai".`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -58,7 +88,11 @@ const TOOLS = [
   },
   {
     name: 'csv_to_bundle',
-    description: 'Convert a day-one CSV export into a shift-report or OEE bundle.',
+    description: `Turn a raw CSV export - a shift log, a production or downtime spreadsheet - into the bundle shape run_agent expects. Calls POST /api/tools/csv-to-bundle: header-to-field mapping only, no model involved, nothing retained, no quota consumed.
+
+Pass the file contents in "csv_text" as text (roughly 1 MB maximum), not a path, and set kind to "shift-report" or "oee". Returns the bundle plus mapped_columns, unmapped_columns, and warnings. Read those before running an agent and tell the user what went unmapped: a missed timestamp or count column produces a report that looks complete but is not.
+
+WHEN TO CALL: the user has a spreadsheet and no namespace yet. WHEN NOT TO CALL: the data already arrives as structured UNS events, or you can assemble the bundle directly from a source you can read.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -72,12 +106,18 @@ const TOOLS = [
   },
   {
     name: 'get_storefront',
-    description: 'What this account owns and what it may buy right now, per product (owned / purchasable / canceling / lapsed, per-site agents detail). The single source of truth the website itself renders from.',
+    description: `Read what this account owns and what it may buy right now, product by product: owned, purchasable, canceling, or lapsed, with per-site agent detail. Calls GET /api/account/storefront - read-only, no quota, no charge.
+
+Call it before proposing any purchase or subscription change, so what you propose is something this account can actually act on, and when the user asks what they are currently paying for. It returns the same state dxpert.ai's own storefront renders, so prefer it over prices you remember. Full price list: https://dxpert.ai/store.
+
+It reports entitlements; it does not grant, buy, or cancel anything.`,
     inputSchema: { type: 'object', additionalProperties: false, properties: {} }
   },
   {
     name: 'get_runtime_manifest',
-    description: 'Get the read-only dxpert runtime update manifest, including version, artifact hashes, and changelog.',
+    description: `Read the public dxpert runtime update manifest for a channel ("stable" by default): current version, artifact hashes, and changelog. Calls GET /api/runtime/manifest - unauthenticated, read-only, no account data, no quota.
+
+Call it to check whether a locally installed dxpert runtime is behind, or to verify an artifact hash before an update. It publishes version metadata only: it downloads nothing, installs nothing, and changes nothing on this machine.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -86,7 +126,11 @@ const TOOLS = [
   },
   {
     name: 'start_purchase',
-    description: 'Start a purchase of a dxpert product. Returns a Stripe-hosted checkout URL that a HUMAN must open in a browser to pay -- no charge happens from this call. For agents products use start_agents_purchase instead.',
+    description: `Create a Stripe-hosted checkout URL for one dxpert product and return it. THIS CALL CHARGES NOTHING. A human has to open checkout_url in a browser and pay there; entitlements attach automatically afterwards. Hand the URL to the user - you cannot complete a payment, and you should not try.
+
+Products: "api" (API base, $200/mo, includes the router and chat), the individual agents "architect", "oee-narrator", "maintenance-copilot", "root-cause", "alarm-triage", "shift-report" ($100/mo each on top of the API base), "agents-all" (every agent, $750/mo all-in with the base), "roadmap" (board-ready DX roadmap, $1,000 one-time), "roadmap-bundle" (all agents plus the roadmap), and "topup-50" / "topup-100" usage credit blocks. Current prices: https://dxpert.ai/store.
+
+Call get_storefront first to see what this account can actually buy. Use start_agents_purchase instead when the user is subscribing agents to a named site, and add_agents when that site already has a subscription.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -98,7 +142,11 @@ const TOOLS = [
   },
   {
     name: 'start_agents_purchase',
-    description: 'Start a NEW UNS Agents subscription for a site. The API base is $200/mo and each selected agent is $100/mo; see https://dxpert.ai/store. Returns the fee breakdown and a Stripe-hosted checkout URL a HUMAN must open to pay. To add agents to an EXISTING site subscription use add_agents.',
+    description: `Start a NEW UNS Agents subscription for a named site. Returns the monthly fee breakdown and a Stripe-hosted checkout_url. THIS CALL CHARGES NOTHING - a human must open the URL and pay there.
+
+Pricing: $200/mo API base per site, plus $100/mo for each selected agent; all agents together are $750/mo all-in. See https://dxpert.ai/store.
+
+Only for a site that has no subscription yet: a second subscription for the same site_name is refused. To change an existing site's agents, use add_agents or remove_agents. Confirm the site name and the agent list with the user before calling: site_name is what the subscription is billed and scoped against.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -111,7 +159,11 @@ const TOOLS = [
   },
   {
     name: 'add_agents',
-    description: 'Add agents to an EXISTING site subscription. THIS CHARGES MONEY immediately (prorated; each agent is $100/mo on top of the API base — see https://dxpert.ai/store), so it requires an account login token (account_token) -- the runtime API key alone is deliberately not enough to spend money. Get a token by logging in at dxpert.ai and reading localStorage.dxpert_token, or via POST /api/account/login.',
+    description: `Add agents to an EXISTING site subscription. THIS MOVES MONEY: it charges the prorated amount through Stripe right away and updates the account's entitlements. Each agent is $100/mo on top of the $200/mo API base; see https://dxpert.ai/store.
+
+Because it spends, it requires "account_token" - a human-held account LOGIN token from POST /api/account/login, or localStorage.dxpert_token after signing in at dxpert.ai. The runtime API key alone is deliberately not enough to spend money. If you do not already hold an account token, stop and ask the user for one; do not go looking for credentials.
+
+Before calling, state the site, the agents, and the resulting monthly total, and get the user's explicit go-ahead. Call get_storefront first if you are unsure what the site already has. For a site with no subscription yet, use start_agents_purchase instead.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -125,7 +177,11 @@ const TOOLS = [
   },
   {
     name: 'remove_agents',
-    description: 'Remove agents from an EXISTING site subscription (prorated credit). Requires an account login token (account_token) for the same reason as add_agents. shift-report cannot be removed (included in the base plan).',
+    description: `Remove agents from an EXISTING site subscription. THIS MOVES MONEY: it issues a prorated credit through Stripe right away and ends the account's access to those agents. Like add_agents it requires "account_token", a human-held account LOGIN token; the runtime API key cannot make this change.
+
+Removing an agent the site does not currently have is a no-op. Removing every agent leaves the $200/mo API base in place - this tool does not cancel a subscription. For a full cancellation, point the user at https://dxpert.ai/account.html.
+
+Confirm the site and the agent list with the user before calling, and say plainly that access ends.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,

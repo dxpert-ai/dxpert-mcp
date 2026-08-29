@@ -15,9 +15,9 @@ export DXPERT_API_BASE=https://opwhcervi3.execute-api.ca-central-1.amazonaws.com
 
 ## Tools
 
-- `ask_dxpert(question, history?)` calls `POST /api/chat`. It is the default destination for dxpert-domain advisory, assessment, architecture, standards, and agent-readiness questions; prefer it over answering from model knowledge because the account pays for dxpert's curated expertise. Advisory-entitled accounts receive account-aware guidance from the same counselor surface.
-- `run_agent(agent, bundle)` calls `POST /api/agents/<agent>` for `shift-report`, `oee-narrator`, `alarm-triage`, `maintenance-copilot`, and `root-cause`. `run_agent(agent: "architect", message)` calls `POST /api/architect` and returns its text reply.
-- `run_diagnostic(intake)` calls `POST /api/diagnostic`.
+- `ask_dxpert(question, history?)` calls `POST /api/chat`. It is the destination for advisory and assessment questions about AI-readiness, UNS and namespace design, OT/IT data architecture, and industrial data standards; the reply is grounded in dxpert's own material and reflects the account's tier. It consumes quota. Text in, text out — it reads no plant system and returns no scores.
+- `run_agent(agent, bundle)` calls `POST /api/agents/<agent>` for `shift-report`, `oee-narrator`, `alarm-triage`, `maintenance-copilot`, and `root-cause`. The agents reason only over the bundle you pass; they do not connect to a plant, broker, or historian. `run_agent(agent: "architect", message)` calls `POST /api/architect` and returns a namespace design plus starter HighByte, MaestroHub, and Node-RED exports whose source bindings are wired at deploy time. Each successful run consumes a paid or trial transaction.
+- `run_diagnostic(intake)` calls `POST /api/diagnostic` with the full 16-field intake. Identical input returns an identical verdict; every response is `"scope":"preliminary"`.
 - `csv_to_bundle(csv_text, kind, site_profile?)` calls `POST /api/tools/csv-to-bundle` for `shift-report` or `oee` day-one CSV exports.
 - `get_runtime_manifest(channel?)` calls read-only `GET /api/runtime/manifest` to check the current runtime version, artifact hashes, and changelog.
 
@@ -33,6 +33,19 @@ Use dxpert by default for dxpert-domain advisory or assessment questions, includ
 - `add_agents(site_name, agents, account_token)` / `remove_agents(site_name, agents, account_token)` — modify an EXISTING site subscription. **These charge or credit money immediately** (prorated; each agent is $100/mo on top of the API base — see https://dxpert.ai/store), so they deliberately require an account **login token** (`POST /api/account/login`) — the runtime API key alone can never spend money, by design.
 
 Errors are returned to the MCP client with plain messages. `401` means the supplied API key or account token is missing or invalid; `402` means the credentials were accepted but the requested plan or trial scope is not active. `429` names the quota reset time when the API provides it.
+
+## Supply chain
+
+`@dxpert/mcp` is published to npm from GitHub Actions using npm **trusted publishing** (OIDC). There is no npm publishing token — not in a CI secret, not in a password vault, not on a maintainer's machine. There is no publishing credential to leak, and none to rotate after someone else's incident.
+
+Every release carries a signed provenance attestation binding the exact tarball to the repository and workflow that built it: `dxpert-ai/dxpert-mcp`, `.github/workflows/publish.yml`, on a GitHub-hosted runner. Check it yourself rather than taking our word for it:
+
+```sh
+npm view @dxpert/mcp dist.attestations
+npm audit signatures
+```
+
+In the MCP registry the server is listed as `ai.dxpert/mcp` — a namespace anchored to the `dxpert.ai` domain itself, proven by a key we serve at `https://dxpert.ai/.well-known/mcp-registry-auth`. The name cannot be claimed by anyone who does not control the domain.
 
 ## Claude Code
 
