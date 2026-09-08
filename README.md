@@ -50,7 +50,7 @@ In the MCP registry the server is listed as `ai.dxpert/mcp` — a namespace anch
 ## Claude Code
 
 ```sh
-claude mcp add dxpert --env DXPERT_API_KEY=dxp_your_key_here -- node /path/to/oss/dxpert-mcp/bin/dxpert-mcp.js
+claude mcp add dxpert --env DXPERT_API_KEY=dxp_your_key_here -- npx -y @dxpert/mcp
 ```
 
 ## Codex
@@ -59,8 +59,8 @@ Add a stdio MCP server entry that runs Node with this package's bin:
 
 ```toml
 [mcp_servers.dxpert]
-command = "node"
-args = ["/path/to/oss/dxpert-mcp/bin/dxpert-mcp.js"]
+command = "npx"
+args = ["-y", "@dxpert/mcp"]
 env = { DXPERT_API_KEY = "dxp_your_key_here" }
 ```
 
@@ -72,8 +72,8 @@ Use a stdio transport:
 {
   "mcpServers": {
     "dxpert": {
-      "command": "node",
-      "args": ["/path/to/oss/dxpert-mcp/bin/dxpert-mcp.js"],
+      "command": "npx",
+      "args": ["-y", "@dxpert/mcp"],
       "env": {
         "DXPERT_API_KEY": "dxp_your_key_here"
       }
