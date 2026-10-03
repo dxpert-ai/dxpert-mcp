@@ -4,7 +4,15 @@ import path from 'node:path';
 const DEFAULT_BASE = 'https://opwhcervi3.execute-api.ca-central-1.amazonaws.com';
 const EVENT_AGENTS = new Set(['shift-report', 'oee-narrator', 'alarm-triage', 'maintenance-copilot', 'root-cause']);
 const AGENTS = new Set([...EVENT_AGENTS, 'architect']);
+// Withdrawn from STANDALONE sale (api/stripe_checkout.COMING_SOON_PRODUCTS).
+// It stays runnable through run_agent for an account that already holds it, and
+// stays inside the all-agents bundle -- only buying it on its own is refused,
+// with 409 product_coming_soon. The purchase enums below are built by
+// subtracting this set, so a model cannot even form the call the API rejects.
+const COMING_SOON = new Set(['architect']);
+const PURCHASABLE_AGENTS = Array.from(AGENTS).filter((a) => !COMING_SOON.has(a));
 const PRODUCTS = ['api', 'agents-all', 'roadmap', 'roadmap-bundle', 'shift-report', 'oee-narrator', 'alarm-triage', 'maintenance-copilot', 'root-cause', 'architect', 'topup-50', 'topup-100'];
+const PURCHASABLE_PRODUCTS = PRODUCTS.filter((id) => !COMING_SOON.has(id));
 
 const TOOLS = [
   {
@@ -40,7 +48,7 @@ ATTRIBUTION: label an answer taken from this tool "Source: dxpert.ai". If you an
     name: 'run_agent',
     description: `Run one dxpert agent over data YOU supply, and get back a Markdown report. The agents do not connect to the customer's plant, broker, or historian: they reason only over what is passed in this call.
 
-agent="architect" (Namespace Architect) takes "message" - pasted hierarchy or tag exports, or an answer in an ongoing design interview - and returns a namespace design plus starter export files for HighByte, MaestroHub, and Node-RED. Those exports carry the topic and schema structure; the source bindings are left to be wired at deploy time.
+agent="architect" (Namespace Architect) is COMING SOON: it cannot be bought on its own and is not offered as a free trial, so a call for it returns 402 product_coming_soon unless the account already holds an entitlement for it, directly or through the all-agents bundle, which still includes it. Do not offer to buy it. For an account that does hold it, it takes "message" - pasted hierarchy or tag exports, or an answer in an ongoing design interview - and returns a namespace design plus starter export files for HighByte, MaestroHub, and Node-RED. Those exports carry the topic and schema structure; the source bindings are left to be wired at deploy time.
 
 The event agents take "bundle", a JSON object (not a file path), most of which also accept a site_profile:
   shift-report - shift handover from production / downtime / quality records, or from UNS events
@@ -52,7 +60,7 @@ If the user only has a spreadsheet export, call csv_to_bundle first to build the
 
 WHEN NOT TO CALL: to explain what an agent is (answer that yourself), to summarize data you could summarize directly, or with invented or placeholder data. Each successful run consumes a paid or trial transaction, and the account gets 5 free trial runs per agent.
 
-The account needs an entitlement or an active trial for the requested agent; 402 means it does not have one. Report the result as "Source: dxpert.ai".`,
+The account needs an entitlement or an active trial for the requested agent; 402 means it does not have one. Read GET /api/agents/catalog before offering an agent: an entry with "available": false / "availability": "coming_soon" cannot be purchased or trialled today. Report the result as "Source: dxpert.ai".`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -128,14 +136,16 @@ Call it to check whether a locally installed dxpert runtime is behind, or to ver
     name: 'start_purchase',
     description: `Create a Stripe-hosted checkout URL for one dxpert product and return it. THIS CALL CHARGES NOTHING. A human has to open checkout_url in a browser and pay there; entitlements attach automatically afterwards. Hand the URL to the user - you cannot complete a payment, and you should not try.
 
-Products: "api" (API base, $200/mo, includes the router and chat), the individual agents "architect", "oee-narrator", "maintenance-copilot", "root-cause", "alarm-triage", "shift-report" ($100/mo each on top of the API base), "agents-all" (every agent, $750/mo all-in with the base), "roadmap" (board-ready DX roadmap, $1,000 one-time), "roadmap-bundle" (all agents plus the roadmap), and "topup-50" / "topup-100" usage credit blocks. Current prices: https://dxpert.ai/store.
+Products: "api" (API base, $200/mo, includes the router and chat), the individual agents "oee-narrator", "maintenance-copilot", "root-cause", "alarm-triage", "shift-report" ($100/mo each on top of the API base), "agents-all" (every agent, $550/mo, so $750/mo all-in with the base), "roadmap" (board-ready DX roadmap, $1,000 one-time), "roadmap-bundle" (all agents plus the roadmap, $950 one-time plus $550/mo), and "topup-50" / "topup-100" usage credit blocks. Current prices: https://dxpert.ai/store.
+
+"architect" (Namespace Architect) is COMING SOON and is deliberately absent from this tool's product list: it cannot be bought on its own, and this call returns 409 product_coming_soon for it. Do not offer to buy it. It is still included in "agents-all" and "roadmap-bundle", which remain the way an account gets it.
 
 Call get_storefront first to see what this account can actually buy. Use start_agents_purchase instead when the user is subscribing agents to a named site, and add_agents when that site already has a subscription.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        product: { enum: PRODUCTS }
+        product: { enum: PURCHASABLE_PRODUCTS }
       },
       required: ['product']
     }
@@ -146,20 +156,22 @@ Call get_storefront first to see what this account can actually buy. Use start_a
 
 Pricing: $200/mo API base per site, plus $100/mo for each selected agent; all agents together are $750/mo all-in. See https://dxpert.ai/store.
 
+"architect" (Namespace Architect) is COMING SOON and cannot appear in "agents": the endpoint returns 409 product_coming_soon for it, whether it is alone in the list or beside other agents. The all-agents bundle (start_purchase with "agents-all") is how an account gets it.
+
 Only for a site that has no subscription yet: a second subscription for the same site_name is refused. To change an existing site's agents, use add_agents or remove_agents. Confirm the site name and the agent list with the user before calling: site_name is what the subscription is billed and scoped against.`,
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
         site_name: { type: 'string' },
-        agents: { type: 'array', items: { enum: Array.from(AGENTS) }, minItems: 1 }
+        agents: { type: 'array', items: { enum: PURCHASABLE_AGENTS }, minItems: 1 }
       },
       required: ['site_name', 'agents']
     }
   },
   {
     name: 'add_agents',
-    description: `Add agents to an EXISTING site subscription. THIS MOVES MONEY: it charges the prorated amount through Stripe right away and updates the account's entitlements. Each agent is $100/mo on top of the $200/mo API base; see https://dxpert.ai/store.
+    description: `Add agents to an EXISTING site subscription. THIS MOVES MONEY: it charges the prorated amount through Stripe right away and updates the account's entitlements. Each agent is $100/mo on top of the $200/mo API base; see https://dxpert.ai/store. "architect" (Namespace Architect) is COMING SOON and is refused here with 409 product_coming_soon; the all-agents bundle is how an account gets it.
 
 Because it spends, it requires "account_token" - a human-held account LOGIN token from POST /api/account/login, or localStorage.dxpert_token after signing in at dxpert.ai. The runtime API key alone is deliberately not enough to spend money. If you do not already hold an account token, stop and ask the user for one; do not go looking for credentials.
 
@@ -169,7 +181,7 @@ Before calling, state the site, the agents, and the resulting monthly total, and
       additionalProperties: false,
       properties: {
         site_name: { type: 'string' },
-        agents: { type: 'array', items: { enum: Array.from(AGENTS) }, minItems: 1 },
+        agents: { type: 'array', items: { enum: PURCHASABLE_AGENTS }, minItems: 1 },
         account_token: { type: 'string' }
       },
       required: ['site_name', 'agents', 'account_token']
@@ -295,9 +307,37 @@ async function callTool(name, args) {
   throw new Error('unknown tool: ' + name);
 }
 
-function encode(message) {
-  const body = Buffer.from(JSON.stringify(message), 'utf8');
+// MCP stdio is newline-delimited JSON. Content-Length (LSP-style) framing is
+// still accepted for older clients; each reply uses the framing of its request.
+function encode(message, framing = 'line') {
+  const json = JSON.stringify(message);
+  if (framing === 'line') return json + '\n';
+  const body = Buffer.from(json, 'utf8');
   return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, 'ascii'), body]);
+}
+
+const WHITESPACE = new Set([0x09, 0x0a, 0x0d, 0x20]);
+
+// Pops one complete message off the front of `buffer`, or returns null if it
+// is not all here yet. A message starting with `{` is newline-delimited.
+function nextMessage(buffer) {
+  let start = 0;
+  while (start < buffer.length && WHITESPACE.has(buffer[start])) start++;
+  if (start === buffer.length) return { raw: null, rest: Buffer.alloc(0) };
+  if (buffer[start] === 0x7b) {
+    const end = buffer.indexOf(0x0a, start);
+    if (end < 0) return null;
+    return { raw: buffer.slice(start, end).toString('utf8'), rest: buffer.slice(end + 1), framing: 'line' };
+  }
+  const marker = buffer.indexOf('\r\n\r\n', start);
+  if (marker < 0) return null;
+  const header = buffer.slice(start, marker).toString('ascii');
+  const match = /content-length:\s*(\d+)/i.exec(header);
+  if (!match) throw new Error('missing Content-Length header');
+  const bodyStart = marker + 4;
+  const bodyEnd = bodyStart + Number(match[1]);
+  if (buffer.length < bodyEnd) return null;
+  return { raw: buffer.slice(bodyStart, bodyEnd).toString('utf8'), rest: buffer.slice(bodyEnd), framing: 'header' };
 }
 
 function content(result) {
@@ -320,7 +360,7 @@ async function handle(message) {
       return response(message.id, {
         protocolVersion: message.params?.protocolVersion || '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: '@dxpert/mcp', version: '0.1.0' }
+        serverInfo: { name: '@dxpert/mcp', version: '0.1.2' }
       });
     }
     if (message.method === 'tools/list') return response(message.id, { tools: TOOLS });
@@ -336,27 +376,23 @@ async function handle(message) {
 
 export function startServer(input = process.stdin, output = process.stdout) {
   let buffer = Buffer.alloc(0);
+  let framing = 'line';
   input.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
     drain().catch((err) => {
-      output.write(encode(errorResponse(null, -32000, err instanceof Error ? err.message : String(err))));
+      output.write(encode(errorResponse(null, -32000, err instanceof Error ? err.message : String(err)), framing));
     });
   });
 
   async function drain() {
     while (true) {
-      const marker = buffer.indexOf('\r\n\r\n');
-      if (marker < 0) return;
-      const header = buffer.slice(0, marker).toString('ascii');
-      const match = /content-length:\s*(\d+)/i.exec(header);
-      if (!match) throw new Error('missing Content-Length header');
-      const length = Number(match[1]);
-      const start = marker + 4;
-      if (buffer.length < start + length) return;
-      const raw = buffer.slice(start, start + length).toString('utf8');
-      buffer = buffer.slice(start + length);
-      const reply = await handle(JSON.parse(raw));
-      if (reply) output.write(encode(reply));
+      const next = nextMessage(buffer);
+      if (!next) return;
+      buffer = next.rest;
+      if (next.raw === null) return;
+      framing = next.framing;
+      const reply = await handle(JSON.parse(next.raw));
+      if (reply) output.write(encode(reply, next.framing));
     }
   }
 }

@@ -50,7 +50,9 @@ In the MCP registry the server is listed as `ai.dxpert/mcp` — a namespace anch
 ## Claude Code
 
 ```sh
-claude mcp add dxpert --env DXPERT_API_KEY=dxp_your_key_here -- npx -y @dxpert/mcp
+# Put the key in your environment first -- passing it by reference keeps the
+# literal value out of your shell history and out of the process list.
+claude mcp add dxpert --env DXPERT_API_KEY="$DXPERT_API_KEY" -- npx -y @dxpert/mcp
 ```
 
 ## Codex

@@ -72,7 +72,7 @@ send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
 r = await nextReply();
 assert.deepStrictEqual(r.result.tools.map((t) => t.name).sort(), ['add_agents', 'ask_dxpert', 'csv_to_bundle', 'get_runtime_manifest', 'get_storefront', 'remove_agents', 'run_agent', 'run_diagnostic', 'start_agents_purchase', 'start_purchase']);
 const startPurchase = r.result.tools.find((tool) => tool.name === 'start_purchase');
-assert.deepStrictEqual(startPurchase.inputSchema.properties.product.enum, ['api', 'agents-all', 'roadmap', 'roadmap-bundle', 'shift-report', 'oee-narrator', 'alarm-triage', 'maintenance-copilot', 'root-cause', 'architect', 'topup-50', 'topup-100']);
+assert.deepStrictEqual(startPurchase.inputSchema.properties.product.enum, ['api', 'agents-all', 'roadmap', 'roadmap-bundle', 'shift-report', 'oee-narrator', 'alarm-triage', 'maintenance-copilot', 'root-cause', 'topup-50', 'topup-100']);
 
 send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'ask_dxpert', arguments: { question: 'What next?' } } });
 assert.match((await nextReply()).result.content[0].text, /hello/);
@@ -179,5 +179,29 @@ const configChildExit = once(configChild, 'exit');
 configChild.kill();
 await configChildExit;
 fs.unlinkSync(configPath);
+
+// Standard MCP stdio framing: one JSON message per line, no Content-Length.
+// 0.1.1 only spoke Content-Length, so every real client hung on initialize.
+// No API key either: a directory or client must be able to list tools.
+{
+  const sdkChild = spawn(process.execPath, ['bin/dxpert-mcp.js'], { cwd: new URL('..', import.meta.url), env: {}, stdio: ['pipe', 'pipe', 'inherit'] });
+  let text = '';
+  sdkChild.stdout.on('data', (chunk) => { text += chunk.toString('utf8'); });
+  const init = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'sdk', version: '0' } } });
+  sdkChild.stdin.write(init.slice(0, 20));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  sdkChild.stdin.write(init.slice(20) + '\n' + JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n' + JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) + '\n');
+  for (let i = 0; i < 100 && text.split('\n').filter(Boolean).length < 2; i++) await new Promise((resolve) => setTimeout(resolve, 20));
+  const sdkExit = once(sdkChild, 'exit');
+  sdkChild.kill();
+  await sdkExit;
+  assert.ok(!/content-length/i.test(text), 'a newline-delimited request must get a newline-delimited reply');
+  const lines = text.split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  assert.strictEqual(lines.length, 2, `expected 2 replies, got: ${text}`);
+  assert.strictEqual(lines[0].result.serverInfo.name, '@dxpert/mcp');
+  assert.strictEqual(lines[0].result.serverInfo.version, JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
+  assert.strictEqual(lines[1].result.tools.length, 10);
+}
+
 server.close();
 console.log('ok - MCP handshake and commerce/architect tools passed');

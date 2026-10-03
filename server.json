@@ -3,7 +3,7 @@
   "name": "ai.dxpert/mcp",
   "title": "dxpert.ai \u2014 industrial AI-readiness & UNS agents",
   "description": "Industrial AI-readiness diagnostics, UNS design, and UNS agents for MCP clients.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "websiteUrl": "https://dxpert.ai",
   "repository": {
     "url": "https://github.com/dxpert-ai/dxpert-mcp",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "@dxpert/mcp",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "transport": {
         "type": "stdio"
       },
