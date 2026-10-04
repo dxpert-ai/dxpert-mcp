@@ -1,0 +1,40 @@
+name: Publish to MCP registry
+
+# Publishes server.json for ai.dxpert/mcp (this repo) and ai.dxpert/uns-tools
+# (dxpert-ai/uns-tools) to the official MCP registry. Domain auth: the Ed25519
+# private key in the MCP_REGISTRY_KEY secret (PEM) matches the public key served
+# at https://dxpert.ai/.well-known/mcp-registry-auth. The key is never printed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: dxpert-mcp
+      - uses: actions/checkout@v4
+        with:
+          repository: dxpert-ai/uns-tools
+          path: uns-tools
+      - name: Install mcp-publisher
+        run: |
+          curl -sSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz" | tar -xz mcp-publisher
+          ./mcp-publisher --help | head -1
+      - name: Log in with the dxpert.ai domain key
+        env:
+          MCP_REGISTRY_KEY: ${{ secrets.MCP_REGISTRY_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$MCP_REGISTRY_KEY" > key.pem
+          PRIV=$(openssl pkey -in key.pem -outform DER | tail -c 32 | xxd -p -c 64)
+          rm -f key.pem
+          ./mcp-publisher login http --domain dxpert.ai --private-key "$PRIV"
+      - name: Publish ai.dxpert/mcp
+        run: cd dxpert-mcp && ../mcp-publisher publish
+      - name: Publish ai.dxpert/uns-tools
+        run: cd uns-tools && ../mcp-publisher publish
