@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "ai.dxpert/mcp",
   "title": "dxpert.ai \u2014 industrial AI-readiness & UNS agents",
-  "description": "Industrial AI-readiness diagnostic, dxpert Advisor, and the UNS agents included in dxpert Pro, for MCP clients.",
+  "description": "AI-readiness diagnostic, dxpert Advisor and the industrial agents of dxpert Pro, for MCP clients.",
   "version": "0.2.0",
   "websiteUrl": "https://dxpert.ai",
   "repository": {
