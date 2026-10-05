@@ -9,17 +9,25 @@ const server = http.createServer((req, res) => {
   let body = '';
   req.on('data', (chunk) => { body += chunk; });
   req.on('end', () => {
-    seen.push({ url: req.url, key: req.headers['x-api-key'], auth: req.headers['authorization'], body: JSON.parse(body || '{}') });
+    seen.push({ url: req.url, key: req.headers['x-api-key'], body: JSON.parse(body || '{}') });
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api/chat') res.end(JSON.stringify({ reply: 'hello', scope: 'preliminary' }));
+    if (req.url === '/api/chat' && JSON.parse(body || '{}').message === 'allowance gone') {
+      res.statusCode = 429;
+      res.setHeader('X-Quota-Resets-At', '2026-11-01T00:00:00+00:00');
+      res.end(JSON.stringify({ detail: { error: 'pro_allowance_exhausted', scope: 'pro_budget', resets_at: '2026-11-01T00:00:00+00:00' } }));
+    }
+    else if (req.url === '/api/diagnostic' && JSON.parse(body || '{}').invalid) {
+      res.statusCode = 422;
+      res.end(JSON.stringify({ detail: [{ type: 'missing', loc: ['body', 'site_count'], msg: 'Field required' }, { type: 'enum', loc: ['body', 'sector'], msg: "Input should be 'discrete_mfg' or 'process_mfg'" }] }));
+    }
+    else if (req.url === '/api/chat') res.end(JSON.stringify({ reply: 'hello', scope: 'preliminary' }));
     else if (req.url?.startsWith('/api/agents/')) res.end(JSON.stringify({ report_markdown: 'agent ok' }));
     else if (req.url === '/api/architect') res.end(JSON.stringify({ reply: 'architect ok' }));
     else if (req.url === '/api/diagnostic') res.end(JSON.stringify({ scores: { axes: {}, acatech_stage: 1, ai_readiness_gate: [], confidence: 0.8 }, report_markdown: 'diag ok' }));
     else if (req.url === '/api/tools/csv-to-bundle') res.end(JSON.stringify({ bundle: { production: [] }, mapped_columns: {}, unmapped_columns: [], warnings: [] }));
-    else if (req.url === '/api/account/storefront') res.end(JSON.stringify({ products: { roadmap: { state: 'purchasable' } } }));
+    else if (req.url === '/api/account/storefront') res.end(JSON.stringify({ plan: 'free', try_pro_remaining: 5, products: { pro: { state: 'purchasable' }, roadmap: { state: 'purchasable' } } }));
     else if (req.url === '/api/checkout/roadmap') res.end(JSON.stringify({ checkout_url: 'https://checkout.stripe.com/c/pay/cs_mcp_roadmap' }));
-    else if (req.url === '/api/checkout/agents') res.end(JSON.stringify({ checkout_url: 'https://checkout.stripe.com/c/pay/cs_mcp_agents', fee_breakdown: [], total_monthly_usd: 940 }));
-    else if (req.url === '/api/account/agents/add') res.end(JSON.stringify({ updated_agents: ['shift-report', 'oee-narrator'], fee_breakdown: [], total_monthly_usd: 940 }));
+    else if (req.url === '/api/checkout/pro') res.end(JSON.stringify({ checkout_url: 'https://checkout.stripe.com/c/pay/cs_mcp_pro' }));
     else { res.statusCode = 404; res.end(JSON.stringify({ error: 'not_found' })); }
   });
 });
@@ -70,9 +78,22 @@ assert.strictEqual(r.result.serverInfo.name, '@dxpert/mcp');
 
 send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
 r = await nextReply();
-assert.deepStrictEqual(r.result.tools.map((t) => t.name).sort(), ['add_agents', 'ask_dxpert', 'csv_to_bundle', 'get_runtime_manifest', 'get_storefront', 'remove_agents', 'run_agent', 'run_diagnostic', 'start_agents_purchase', 'start_purchase']);
+// 0.2.0: exactly seven tools. The site-subscription tools were removed when
+// every agent became included in dxpert Pro (docs/54 §3.6).
+const toolNames = r.result.tools.map((t) => t.name);
+assert.deepStrictEqual([...toolNames].sort(), ['ask_dxpert', 'csv_to_bundle', 'get_runtime_manifest', 'get_storefront', 'run_agent', 'run_diagnostic', 'start_purchase']);
+for (const tool of r.result.tools) {
+  assert.ok(typeof tool.name === 'string' && tool.name.length > 0, 'every tool has a name');
+  assert.ok(typeof tool.description === 'string' && tool.description.length > 0, `${tool.name} has a description`);
+  assert.strictEqual(tool.inputSchema?.type, 'object', `${tool.name} inputSchema is an object schema`);
+}
 const startPurchase = r.result.tools.find((tool) => tool.name === 'start_purchase');
-assert.deepStrictEqual(startPurchase.inputSchema.properties.product.enum, ['api', 'agents-all', 'roadmap', 'roadmap-bundle', 'shift-report', 'oee-narrator', 'alarm-triage', 'maintenance-copilot', 'root-cause', 'topup-50', 'topup-100']);
+assert.deepStrictEqual(startPurchase.inputSchema.properties.product.enum, ['pro', 'roadmap']);
+// Descriptions are price-free so npm/registry/Glama copies cannot drift from
+// the live catalog: no currency amounts anywhere in the tool list.
+for (const tool of r.result.tools) {
+  assert.ok(!/\$\s?\d/.test(tool.description), `${tool.name} description must not carry a price`);
+}
 
 send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'ask_dxpert', arguments: { question: 'What next?' } } });
 assert.match((await nextReply()).result.content[0].text, /hello/);
@@ -97,13 +118,20 @@ let purchase = (await nextReply()).result.content[0].text;
 assert.match(purchase, /cs_mcp_roadmap/);
 assert.match(purchase, /A human must open checkout_url/);
 
-send({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'start_agents_purchase', arguments: { site_name: 'Riverside', agents: ['shift-report'] } } });
-assert.match((await nextReply()).result.content[0].text, /cs_mcp_agents/);
+send({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'start_purchase', arguments: { product: 'pro' } } });
+purchase = (await nextReply()).result.content[0].text;
+assert.match(purchase, /cs_mcp_pro/);
+assert.match(purchase, /A human must open checkout_url/);
 
-send({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'add_agents', arguments: { site_name: 'Riverside', agents: ['oee-narrator'], account_token: 'tok_login_123' } } });
-assert.match((await nextReply()).result.content[0].text, /updated_agents/);
+// A product outside the enum is refused locally, before any HTTP call.
+send({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'start_purchase', arguments: { product: 'shift-report' } } });
+assert.match((await nextReply()).error.message, /product must be one of: pro, roadmap/);
 
-assert.strictEqual(seen.length, 9);
+// The removed 0.1.x site-subscription tools are gone, not silently routed.
+send({ jsonrpc: '2.0', id: 12, method: 'tools/call', params: { name: 'add_agents', arguments: {} } });
+assert.match((await nextReply()).error.message, /unknown tool/);
+
+assert.strictEqual(seen.length, 8);
 assert.ok(seen.every((call) => call.key === 'dxp_test_key'));
 assert.strictEqual(seen[0].url, '/api/chat');
 assert.strictEqual(seen[1].url, '/api/agents/shift-report');
@@ -113,11 +141,21 @@ assert.strictEqual(seen[3].url, '/api/diagnostic');
 assert.strictEqual(seen[4].url, '/api/tools/csv-to-bundle');
 assert.strictEqual(seen[5].url, '/api/account/storefront');
 assert.strictEqual(seen[6].url, '/api/checkout/roadmap');
-assert.strictEqual(seen[7].url, '/api/checkout/agents');
-assert.strictEqual(seen[8].url, '/api/account/agents/add');
-// Money-moving call carries the account LOGIN token, not just the API key.
-assert.strictEqual(seen[8].auth, 'Bearer tok_login_123');
-assert.ok(!seen[6].auth && !seen[7].auth, 'start-purchase calls must not need a login token');
+assert.strictEqual(seen[7].url, '/api/checkout/pro');
+
+// A used-up dxpert Pro allowance is named as such, with its renewal time.
+send({ jsonrpc: '2.0', id: 13, method: 'tools/call', params: { name: 'ask_dxpert', arguments: { question: 'allowance gone' } } });
+const exhausted = (await nextReply()).error.message;
+assert.match(exhausted, /pro_allowance_exhausted/);
+assert.match(exhausted, /2026-11-01/);
+assert.match(exhausted, /nothing extra to buy/);
+
+// FastAPI 422 field details reach the caller, so it can fix the intake.
+send({ jsonrpc: '2.0', id: 14, method: 'tools/call', params: { name: 'run_diagnostic', arguments: { intake: { invalid: true } } } });
+const invalid = (await nextReply()).error.message;
+assert.match(invalid, /422/);
+assert.match(invalid, /site_count: Field required/);
+assert.match(invalid, /sector: Input should be/);
 
 const childExit = once(child, 'exit');
 child.kill();
@@ -173,7 +211,7 @@ async function nextConfigReply() {
 
 sendConfig({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'get_storefront', arguments: {} } });
 assert.match((await nextConfigReply()).result.content[0].text, /purchasable/);
-assert.strictEqual(seen[9].key, 'dxp_config_file_key');
+assert.strictEqual(seen[seen.length - 1].key, 'dxp_config_file_key');
 
 const configChildExit = once(configChild, 'exit');
 configChild.kill();
@@ -200,8 +238,8 @@ fs.unlinkSync(configPath);
   assert.strictEqual(lines.length, 2, `expected 2 replies, got: ${text}`);
   assert.strictEqual(lines[0].result.serverInfo.name, '@dxpert/mcp');
   assert.strictEqual(lines[0].result.serverInfo.version, JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
-  assert.strictEqual(lines[1].result.tools.length, 10);
+  assert.ok(Array.isArray(lines[1].result.tools) && lines[1].result.tools.length > 0, 'tools/list is non-empty without an API key');
 }
 
 server.close();
-console.log('ok - MCP handshake and commerce/architect tools passed');
+console.log('ok - MCP handshake, seven tools, start_purchase pro|roadmap and architect passed');
