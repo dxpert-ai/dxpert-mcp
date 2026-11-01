@@ -1,5 +1,7 @@
 # @dxpert/mcp
 
+[![M8ven Score](https://m8ven.ai/badge/mcp/dxpert-ai/dxpert-mcp)](https://m8ven.ai/mcp/dxpert-ai/dxpert-mcp?s=readme)
+
 Stdio MCP server for using a dxpert.ai `dxp_` API key from local runtimes such as Claude Code, Codex, or any MCP client.
 
 One key, one server; the account's plan decides what the key unlocks:
