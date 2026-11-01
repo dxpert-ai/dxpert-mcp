@@ -13,6 +13,13 @@ const PRODUCTS = ['pro', 'roadmap'];
 const TOOLS = [
   {
     name: 'ask_dxpert',
+    annotations: {
+      title: 'Ask dxpert',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     description: `Ask dxpert.ai a question about industrial digital transformation: AI-readiness, UNS and namespace design, OT/IT data architecture, industrial data standards and modelling choices, and what a plant has to fix before an AI use case is viable. Calls POST /api/chat and returns a text reply plus routing metadata.
 
 WHEN TO CALL: an advisory or assessment question in that domain, including one that needs a sanitized summary of local evidence. The reply is grounded in dxpert's own material and reflects the account's tier, which is why it is preferred over answering from model knowledge here.
@@ -42,6 +49,13 @@ ATTRIBUTION: label an answer taken from this tool "Source: dxpert.ai". If you an
   },
   {
     name: 'run_agent',
+    annotations: {
+      title: 'Run a dxpert agent',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     description: `Run one dxpert agent over data YOU supply, and get back a Markdown report. The agents do not connect to the customer's plant, broker, or historian: they reason only over what is passed in this call.
 
 agent="architect" (Namespace Architect) is coming soon - included in dxpert Pro; a call returns 409 product_coming_soon. Do not offer it as available.
@@ -74,6 +88,13 @@ ACCESS: every live agent is included in dxpert Pro. A free account key carries T
   },
   {
     name: 'run_diagnostic',
+    annotations: {
+      title: 'Run the AI-readiness diagnostic',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     description: `Run dxpert's preliminary industrial AI-readiness diagnostic over a self-reported intake. Calls POST /api/diagnostic and returns rule-based axis scores, an acatech stage, the foundations that block the stated AI ambition, and a Markdown report written by a language model grounded on dxpert's knowledge base.
 
 "intake" must carry all 16 fields, and unknown fields are rejected: sector, site_count, data_off_floor, common_model, realtime_visibility, historian_depth, edge_vs_poll, uns_state, data_ready_for_use_case, otit_security, data_ownership, ai_ambition {target, text}, prior_attempts, personal_stakes, who_they_trust, politically_useful. Ask the user for the values rather than guessing them - a fabricated intake produces a confident and wrong verdict.
@@ -92,6 +113,11 @@ Report the result as "Source: dxpert.ai".`,
   },
   {
     name: 'csv_to_bundle',
+    annotations: {
+      title: 'Convert a CSV export into an agent bundle',
+      readOnlyHint: true,
+      openWorldHint: true
+    },
     description: `The Spreadsheet-to-agent converter: turn a raw CSV export - a shift log, a production or downtime spreadsheet - into the bundle shape run_agent expects. Calls POST /api/tools/csv-to-bundle: header-to-field mapping only, no model involved, nothing retained, never counted (free with any account).
 
 Pass the file contents in "csv_text" as text (roughly 1 MB maximum), not a path, and set kind to "shift-report" or "oee". Returns the bundle plus mapped_columns, unmapped_columns, and warnings. Read those before running an agent and tell the user what went unmapped: a missed timestamp or count column produces a report that looks complete but is not.
@@ -110,6 +136,12 @@ WHEN TO CALL: the user has a spreadsheet and no namespace yet. WHEN NOT TO CALL:
   },
   {
     name: 'get_storefront',
+    annotations: {
+      title: 'Read the account plan and purchase state',
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: true
+    },
     description: `Read this account's plan and what it may buy right now: its plan ("free" or "pro"), the dxpert Pro state (active, canceling, canceled in period, lapsed, or none), the DX Roadmap purchase state, and the Try Pro runs remaining. Calls GET /api/account/storefront - read-only, no quota, no charge.
 
 Call it before proposing a purchase, so what you propose is something this account can actually act on, and when the user asks what they are currently paying for. It returns the same state dxpert.ai's own store renders. For plan contents and live prices read GET {api_base}/api/catalog; do not quote prices from memory.
@@ -119,6 +151,12 @@ It reports state; it does not grant, buy, or cancel anything.`,
   },
   {
     name: 'get_runtime_manifest',
+    annotations: {
+      title: 'Read the runtime update manifest',
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: true
+    },
     description: `Read the public dxpert runtime update manifest for a channel ("stable" by default): current version, artifact hashes, and changelog. Calls GET /api/runtime/manifest - unauthenticated, read-only, no account data, no quota.
 
 Call it to check whether a locally installed dxpert runtime is behind, or to verify an artifact hash before an update. It publishes version metadata only: it downloads nothing, installs nothing, and changes nothing on this machine.`,
@@ -130,6 +168,13 @@ Call it to check whether a locally installed dxpert runtime is behind, or to ver
   },
   {
     name: 'start_purchase',
+    annotations: {
+      title: 'Create a Stripe checkout URL',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    },
     description: `Create a Stripe-hosted checkout URL for one dxpert product and return it. THIS CALL CHARGES NOTHING. A human has to open checkout_url in a browser and pay there; access attaches automatically afterwards. Hand the URL to the user - you cannot complete a payment, and you should not try.
 
 Products:
@@ -306,7 +351,7 @@ async function handle(message) {
       return response(message.id, {
         protocolVersion: message.params?.protocolVersion || '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { version: '0.2.0', name: '@dxpert/mcp' }
+        serverInfo: { version: '0.2.1', name: '@dxpert/mcp' }
       });
     }
     if (message.method === 'tools/list') return response(message.id, { tools: TOOLS });

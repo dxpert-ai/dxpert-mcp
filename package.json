@@ -1,7 +1,7 @@
 {
   "name": "@dxpert/mcp",
   "mcpName": "ai.dxpert/mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Stdio MCP server for dxpert.ai API keys: ask dxpert Advisor, run the UNS agents included in dxpert Pro (Try Pro on a free key), run diagnostics, and convert day-one CSV exports.",
   "license": "MIT",
   "type": "module",
